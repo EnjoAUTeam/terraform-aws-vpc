@@ -108,25 +108,6 @@ output "public_subnets_ipv6_cidr_blocks" {
   value       = aws_subnet.public.*.ipv6_cidr_block
 }
 
-output "database_subnets" {
-  description = "List of IDs of database subnets"
-  value       = aws_subnet.database.*.id
-}
-
-output "database_subnet_arns" {
-  description = "List of ARNs of database subnets"
-  value       = aws_subnet.database.*.arn
-}
-
-output "database_subnets_cidr_blocks" {
-  description = "List of cidr_blocks of database subnets"
-  value       = aws_subnet.database.*.cidr_block
-}
-
-output "database_subnets_ipv6_cidr_blocks" {
-  description = "List of IPv6 cidr_blocks of database subnets in an IPv6 enabled VPC"
-  value       = aws_subnet.database.*.ipv6_cidr_block
-}
 
 output "database_subnet_group" {
   description = "ID of database subnet group"
@@ -218,11 +199,6 @@ output "private_route_table_ids" {
   value       = aws_route_table.private.*.id
 }
 
-output "database_route_table_ids" {
-  description = "List of IDs of database route tables"
-  value       = length(aws_route_table.database.*.id) > 0 ? aws_route_table.database.*.id : aws_route_table.private.*.id
-}
-
 output "redshift_route_table_ids" {
   description = "List of IDs of redshift route tables"
   value       = length(aws_route_table.redshift.*.id) > 0 ? aws_route_table.redshift.*.id : aws_route_table.private.*.id
@@ -248,21 +224,6 @@ output "public_internet_gateway_ipv6_route_id" {
   value       = concat(aws_route.public_internet_gateway_ipv6.*.id, [""])[0]
 }
 
-output "database_internet_gateway_route_id" {
-  description = "ID of the database internet gateway route."
-  value       = concat(aws_route.database_internet_gateway.*.id, [""])[0]
-}
-
-output "database_nat_gateway_route_ids" {
-  description = "List of IDs of the database nat gateway route."
-  value       = aws_route.database_nat_gateway.*.id
-}
-
-output "database_ipv6_egress_route_id" {
-  description = "ID of the database IPv6 egress route."
-  value       = concat(aws_route.database_ipv6_egress.*.id, [""])[0]
-}
-
 output "private_nat_gateway_route_ids" {
   description = "List of IDs of the private nat gateway route."
   value       = aws_route.private_nat_gateway.*.id
@@ -276,11 +237,6 @@ output "private_ipv6_egress_route_ids" {
 output "private_route_table_association_ids" {
   description = "List of IDs of the private route table association"
   value       = aws_route_table_association.private.*.id
-}
-
-output "database_route_table_association_ids" {
-  description = "List of IDs of the database route table association"
-  value       = aws_route_table_association.database.*.id
 }
 
 output "redshift_route_table_association_ids" {
@@ -445,16 +401,6 @@ output "intra_network_acl_id" {
 output "intra_network_acl_arn" {
   description = "ARN of the intra network ACL"
   value       = concat(aws_network_acl.intra.*.arn, [""])[0]
-}
-
-output "database_network_acl_id" {
-  description = "ID of the database network ACL"
-  value       = concat(aws_network_acl.database.*.id, [""])[0]
-}
-
-output "database_network_acl_arn" {
-  description = "ARN of the database network ACL"
-  value       = concat(aws_network_acl.database.*.arn, [""])[0]
 }
 
 output "redshift_network_acl_id" {
