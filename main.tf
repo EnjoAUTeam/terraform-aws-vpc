@@ -1,25 +1,24 @@
 locals {
   max_subnet_length = max(
-    length(var.private_subnets),
-    length(var.elasticache_subnets),
-    length(var.database_subnets),
-    length(var.redshift_subnets),
+  length(var.private_subnets),
+  length(var.elasticache_subnets),
+  length(var.redshift_subnets),
   )
   nat_gateway_count = var.single_nat_gateway ? 1 : var.one_nat_gateway_per_az ? length(var.azs) : local.max_subnet_length
 
   # Use `local.vpc_id` to give a hint to Terraform that subnets should be deleted before secondary CIDR blocks can be free!
   vpc_id = element(
-    concat(
-      aws_vpc_ipv4_cidr_block_association.this.*.vpc_id,
-      aws_vpc.this.*.id,
-      [""],
-    ),
-    0,
+  concat(
+  aws_vpc_ipv4_cidr_block_association.this.*.vpc_id,
+  aws_vpc.this.*.id,
+  [""],
+  ),
+  0,
   )
 
   vpce_tags = merge(
-    var.tags,
-    var.vpc_endpoint_tags,
+  var.tags,
+  var.vpc_endpoint_tags,
   )
 }
 
@@ -38,11 +37,11 @@ resource "aws_vpc" "this" {
   assign_generated_ipv6_cidr_block = var.enable_ipv6
 
   tags = merge(
-    {
-      "Name" = format("%s", var.name)
-    },
-    var.tags,
-    var.vpc_tags,
+  {
+    "Name" = format("%s", var.name)
+  },
+  var.tags,
+  var.vpc_tags,
   )
 }
 
@@ -90,11 +89,11 @@ resource "aws_default_security_group" "this" {
   }
 
   tags = merge(
-    {
-      "Name" = format("%s", var.default_security_group_name)
-    },
-    var.tags,
-    var.default_security_group_tags,
+  {
+    "Name" = format("%s", var.default_security_group_name)
+  },
+  var.tags,
+  var.default_security_group_tags,
   )
 }
 
@@ -111,11 +110,11 @@ resource "aws_vpc_dhcp_options" "this" {
   netbios_node_type    = var.dhcp_options_netbios_node_type
 
   tags = merge(
-    {
-      "Name" = format("%s", var.name)
-    },
-    var.tags,
-    var.dhcp_options_tags,
+  {
+    "Name" = format("%s", var.name)
+  },
+  var.tags,
+  var.dhcp_options_tags,
   )
 }
 
@@ -138,11 +137,11 @@ resource "aws_internet_gateway" "this" {
   vpc_id = local.vpc_id
 
   tags = merge(
-    {
-      "Name" = format("%s", var.name)
-    },
-    var.tags,
-    var.igw_tags,
+  {
+    "Name" = format("%s", var.name)
+  },
+  var.tags,
+  var.igw_tags,
   )
 }
 
@@ -152,11 +151,11 @@ resource "aws_egress_only_internet_gateway" "this" {
   vpc_id = local.vpc_id
 
   tags = merge(
-    {
-      "Name" = format("%s", var.name)
-    },
-    var.tags,
-    var.igw_tags,
+  {
+    "Name" = format("%s", var.name)
+  },
+  var.tags,
+  var.igw_tags,
   )
 }
 
@@ -169,11 +168,11 @@ resource "aws_route_table" "public" {
   vpc_id = local.vpc_id
 
   tags = merge(
-    {
-      "Name" = format("%s-${var.public_subnet_suffix}", var.name)
-    },
-    var.tags,
-    var.public_route_table_tags,
+  {
+    "Name" = format("%s-${var.public_subnet_suffix}", var.name)
+  },
+  var.tags,
+  var.public_route_table_tags,
   )
 }
 
@@ -207,69 +206,16 @@ resource "aws_route_table" "private" {
   vpc_id = local.vpc_id
 
   tags = merge(
-    {
-      "Name" = var.single_nat_gateway ? "${var.name}-${var.private_subnet_suffix}" : format(
-        "%s-${var.private_subnet_suffix}-%s",
-        var.name,
-        element(var.azs, count.index),
-      )
-    },
-    var.tags,
-    var.private_route_table_tags,
+  {
+    "Name" = var.single_nat_gateway ? "${var.name}-${var.private_subnet_suffix}" : format(
+    "%s-${var.private_subnet_suffix}-%s",
+    var.name,
+    element(var.azs, count.index),
+    )
+  },
+  var.tags,
+  var.private_route_table_tags,
   )
-}
-
-#################
-# Database routes
-#################
-resource "aws_route_table" "database" {
-  count = var.create_vpc && var.create_database_subnet_route_table && length(var.database_subnets) > 0 ? 1 : 0
-
-  vpc_id = local.vpc_id
-
-  tags = merge(
-    {
-      "Name" = "${var.name}-${var.database_subnet_suffix}"
-    },
-    var.tags,
-    var.database_route_table_tags,
-  )
-}
-
-resource "aws_route" "database_internet_gateway" {
-  count = var.create_vpc && var.create_igw && var.create_database_subnet_route_table && length(var.database_subnets) > 0 && var.create_database_internet_gateway_route && false == var.create_database_nat_gateway_route ? 1 : 0
-
-  route_table_id         = aws_route_table.database[0].id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.this[0].id
-
-  timeouts {
-    create = "5m"
-  }
-}
-
-resource "aws_route" "database_nat_gateway" {
-  count = var.create_vpc && var.create_database_subnet_route_table && length(var.database_subnets) > 0 && false == var.create_database_internet_gateway_route && var.create_database_nat_gateway_route && var.enable_nat_gateway ? local.nat_gateway_count : 0
-
-  route_table_id         = element(aws_route_table.database.*.id, count.index)
-  destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = element(aws_nat_gateway.this.*.id, count.index)
-
-  timeouts {
-    create = "5m"
-  }
-}
-
-resource "aws_route" "database_ipv6_egress" {
-  count = var.create_vpc && var.create_egress_only_igw && var.enable_ipv6 && var.create_database_subnet_route_table && length(var.database_subnets) > 0 && var.create_database_internet_gateway_route ? 1 : 0
-
-  route_table_id              = aws_route_table.database[0].id
-  destination_ipv6_cidr_block = "::/0"
-  egress_only_gateway_id      = aws_egress_only_internet_gateway.this[0].id
-
-  timeouts {
-    create = "5m"
-  }
 }
 
 #################
@@ -281,11 +227,11 @@ resource "aws_route_table" "redshift" {
   vpc_id = local.vpc_id
 
   tags = merge(
-    {
-      "Name" = "${var.name}-${var.redshift_subnet_suffix}"
-    },
-    var.tags,
-    var.redshift_route_table_tags,
+  {
+    "Name" = "${var.name}-${var.redshift_subnet_suffix}"
+  },
+  var.tags,
+  var.redshift_route_table_tags,
   )
 }
 
@@ -298,11 +244,11 @@ resource "aws_route_table" "elasticache" {
   vpc_id = local.vpc_id
 
   tags = merge(
-    {
-      "Name" = "${var.name}-${var.elasticache_subnet_suffix}"
-    },
-    var.tags,
-    var.elasticache_route_table_tags,
+  {
+    "Name" = "${var.name}-${var.elasticache_subnet_suffix}"
+  },
+  var.tags,
+  var.elasticache_route_table_tags,
   )
 }
 
@@ -315,11 +261,11 @@ resource "aws_route_table" "intra" {
   vpc_id = local.vpc_id
 
   tags = merge(
-    {
-      "Name" = "${var.name}-${var.intra_subnet_suffix}"
-    },
-    var.tags,
-    var.intra_route_table_tags,
+  {
+    "Name" = "${var.name}-${var.intra_subnet_suffix}"
+  },
+  var.tags,
+  var.intra_route_table_tags,
   )
 }
 
@@ -339,15 +285,15 @@ resource "aws_subnet" "public" {
   ipv6_cidr_block = var.enable_ipv6 && length(var.public_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.public_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
-    {
-      "Name" = format(
-        "%s-${var.public_subnet_suffix}-%s",
-        var.name,
-        element(var.azs, count.index),
-      )
-    },
-    var.tags,
-    var.public_subnet_tags,
+  {
+    "Name" = format(
+    "%s-${var.public_subnet_suffix}-%s",
+    var.name,
+    element(var.azs, count.index),
+    )
+  },
+  var.tags,
+  var.public_subnet_tags,
   )
 }
 
@@ -366,42 +312,15 @@ resource "aws_subnet" "private" {
   ipv6_cidr_block = var.enable_ipv6 && length(var.private_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.private_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
-    {
-      "Name" = format(
-        "%s-${var.private_subnet_suffix}-%s",
-        var.name,
-        element(var.azs, count.index),
-      )
-    },
-    var.tags,
-    var.private_subnet_tags,
-  )
-}
-
-##################
-# Database subnet
-##################
-resource "aws_subnet" "database" {
-  count = var.create_vpc && length(var.database_subnets) > 0 ? length(var.database_subnets) : 0
-
-  vpc_id                          = local.vpc_id
-  cidr_block                      = var.database_subnets[count.index]
-  availability_zone               = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) > 0 ? element(var.azs, count.index) : null
-  availability_zone_id            = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
-  assign_ipv6_address_on_creation = var.database_subnet_assign_ipv6_address_on_creation == null ? var.assign_ipv6_address_on_creation : var.database_subnet_assign_ipv6_address_on_creation
-
-  ipv6_cidr_block = var.enable_ipv6 && length(var.database_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.database_subnet_ipv6_prefixes[count.index]) : null
-
-  tags = merge(
-    {
-      "Name" = format(
-        "%s-${var.database_subnet_suffix}-%s",
-        var.name,
-        element(var.azs, count.index),
-      )
-    },
-    var.tags,
-    var.database_subnet_tags,
+  {
+    "Name" = format(
+    "%s-${var.private_subnet_suffix}-%s",
+    var.name,
+    element(var.azs, count.index),
+    )
+  },
+  var.tags,
+  var.private_subnet_tags,
   )
 }
 
@@ -413,11 +332,11 @@ resource "aws_db_subnet_group" "database" {
   subnet_ids  = aws_subnet.private.*.id
 
   tags = merge(
-    {
-      "Name" = format("%s", var.name)
-    },
-    var.tags,
-    var.database_subnet_group_tags,
+  {
+    "Name" = format("%s", var.name)
+  },
+  var.tags,
+  var.database_subnet_group_tags,
   )
 }
 
@@ -436,15 +355,15 @@ resource "aws_subnet" "redshift" {
   ipv6_cidr_block = var.enable_ipv6 && length(var.redshift_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.redshift_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
-    {
-      "Name" = format(
-        "%s-${var.redshift_subnet_suffix}-%s",
-        var.name,
-        element(var.azs, count.index),
-      )
-    },
-    var.tags,
-    var.redshift_subnet_tags,
+  {
+    "Name" = format(
+    "%s-${var.redshift_subnet_suffix}-%s",
+    var.name,
+    element(var.azs, count.index),
+    )
+  },
+  var.tags,
+  var.redshift_subnet_tags,
   )
 }
 
@@ -456,11 +375,11 @@ resource "aws_redshift_subnet_group" "redshift" {
   subnet_ids  = aws_subnet.redshift.*.id
 
   tags = merge(
-    {
-      "Name" = format("%s", var.name)
-    },
-    var.tags,
-    var.redshift_subnet_group_tags,
+  {
+    "Name" = format("%s", var.name)
+  },
+  var.tags,
+  var.redshift_subnet_group_tags,
   )
 }
 
@@ -479,15 +398,15 @@ resource "aws_subnet" "elasticache" {
   ipv6_cidr_block = var.enable_ipv6 && length(var.elasticache_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.elasticache_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
-    {
-      "Name" = format(
-        "%s-${var.elasticache_subnet_suffix}-%s",
-        var.name,
-        element(var.azs, count.index),
-      )
-    },
-    var.tags,
-    var.elasticache_subnet_tags,
+  {
+    "Name" = format(
+    "%s-${var.elasticache_subnet_suffix}-%s",
+    var.name,
+    element(var.azs, count.index),
+    )
+  },
+  var.tags,
+  var.elasticache_subnet_tags,
   )
 }
 
@@ -514,15 +433,15 @@ resource "aws_subnet" "intra" {
   ipv6_cidr_block = var.enable_ipv6 && length(var.intra_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.intra_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
-    {
-      "Name" = format(
-        "%s-${var.intra_subnet_suffix}-%s",
-        var.name,
-        element(var.azs, count.index),
-      )
-    },
-    var.tags,
-    var.intra_subnet_tags,
+  {
+    "Name" = format(
+    "%s-${var.intra_subnet_suffix}-%s",
+    var.name,
+    element(var.azs, count.index),
+    )
+  },
+  var.tags,
+  var.intra_subnet_tags,
   )
 }
 
@@ -537,22 +456,20 @@ resource "aws_default_network_acl" "this" {
   # The value of subnet_ids should be any subnet IDs that are not set as subnet_ids
   #   for any of the non-default network ACLs
   subnet_ids = setsubtract(
-    compact(flatten([
-      aws_subnet.public.*.id,
-      aws_subnet.private.*.id,
-      aws_subnet.intra.*.id,
-      aws_subnet.database.*.id,
-      aws_subnet.redshift.*.id,
-      aws_subnet.elasticache.*.id,
-    ])),
-    compact(flatten([
-      aws_network_acl.public.*.subnet_ids,
-      aws_network_acl.private.*.subnet_ids,
-      aws_network_acl.intra.*.subnet_ids,
-      aws_network_acl.database.*.subnet_ids,
-      aws_network_acl.redshift.*.subnet_ids,
-      aws_network_acl.elasticache.*.subnet_ids,
-    ]))
+  compact(flatten([
+    aws_subnet.public.*.id,
+    aws_subnet.private.*.id,
+    aws_subnet.intra.*.id,
+    aws_subnet.redshift.*.id,
+    aws_subnet.elasticache.*.id,
+  ])),
+  compact(flatten([
+    aws_network_acl.public.*.subnet_ids,
+    aws_network_acl.private.*.subnet_ids,
+    aws_network_acl.intra.*.subnet_ids,
+    aws_network_acl.redshift.*.subnet_ids,
+    aws_network_acl.elasticache.*.subnet_ids,
+  ]))
   )
 
   dynamic "ingress" {
@@ -585,11 +502,11 @@ resource "aws_default_network_acl" "this" {
   }
 
   tags = merge(
-    {
-      "Name" = format("%s", var.default_network_acl_name)
-    },
-    var.tags,
-    var.default_network_acl_tags,
+  {
+    "Name" = format("%s", var.default_network_acl_name)
+  },
+  var.tags,
+  var.default_network_acl_tags,
   )
 }
 
@@ -603,11 +520,11 @@ resource "aws_network_acl" "public" {
   subnet_ids = aws_subnet.public.*.id
 
   tags = merge(
-    {
-      "Name" = format("%s-${var.public_subnet_suffix}", var.name)
-    },
-    var.tags,
-    var.public_acl_tags,
+  {
+    "Name" = format("%s-${var.public_subnet_suffix}", var.name)
+  },
+  var.tags,
+  var.public_acl_tags,
   )
 }
 
@@ -655,11 +572,11 @@ resource "aws_network_acl" "private" {
   subnet_ids = aws_subnet.private.*.id
 
   tags = merge(
-    {
-      "Name" = format("%s-${var.private_subnet_suffix}", var.name)
-    },
-    var.tags,
-    var.private_acl_tags,
+  {
+    "Name" = format("%s-${var.private_subnet_suffix}", var.name)
+  },
+  var.tags,
+  var.private_acl_tags,
   )
 }
 
@@ -707,11 +624,11 @@ resource "aws_network_acl" "intra" {
   subnet_ids = aws_subnet.intra.*.id
 
   tags = merge(
-    {
-      "Name" = format("%s-${var.intra_subnet_suffix}", var.name)
-    },
-    var.tags,
-    var.intra_acl_tags,
+  {
+    "Name" = format("%s-${var.intra_subnet_suffix}", var.name)
+  },
+  var.tags,
+  var.intra_acl_tags,
   )
 }
 
@@ -750,58 +667,6 @@ resource "aws_network_acl_rule" "intra_outbound" {
 }
 
 ########################
-# Database Network ACLs
-########################
-resource "aws_network_acl" "database" {
-  count = var.create_vpc && var.database_dedicated_network_acl && length(var.database_subnets) > 0 ? 1 : 0
-
-  vpc_id     = element(concat(aws_vpc.this.*.id, [""]), 0)
-  subnet_ids = aws_subnet.database.*.id
-
-  tags = merge(
-    {
-      "Name" = format("%s-${var.database_subnet_suffix}", var.name)
-    },
-    var.tags,
-    var.database_acl_tags,
-  )
-}
-
-resource "aws_network_acl_rule" "database_inbound" {
-  count = var.create_vpc && var.database_dedicated_network_acl && length(var.database_subnets) > 0 ? length(var.database_inbound_acl_rules) : 0
-
-  network_acl_id = aws_network_acl.database[0].id
-
-  egress          = false
-  rule_number     = var.database_inbound_acl_rules[count.index]["rule_number"]
-  rule_action     = var.database_inbound_acl_rules[count.index]["rule_action"]
-  from_port       = lookup(var.database_inbound_acl_rules[count.index], "from_port", null)
-  to_port         = lookup(var.database_inbound_acl_rules[count.index], "to_port", null)
-  icmp_code       = lookup(var.database_inbound_acl_rules[count.index], "icmp_code", null)
-  icmp_type       = lookup(var.database_inbound_acl_rules[count.index], "icmp_type", null)
-  protocol        = var.database_inbound_acl_rules[count.index]["protocol"]
-  cidr_block      = lookup(var.database_inbound_acl_rules[count.index], "cidr_block", null)
-  ipv6_cidr_block = lookup(var.database_inbound_acl_rules[count.index], "ipv6_cidr_block", null)
-}
-
-resource "aws_network_acl_rule" "database_outbound" {
-  count = var.create_vpc && var.database_dedicated_network_acl && length(var.database_subnets) > 0 ? length(var.database_outbound_acl_rules) : 0
-
-  network_acl_id = aws_network_acl.database[0].id
-
-  egress          = true
-  rule_number     = var.database_outbound_acl_rules[count.index]["rule_number"]
-  rule_action     = var.database_outbound_acl_rules[count.index]["rule_action"]
-  from_port       = lookup(var.database_outbound_acl_rules[count.index], "from_port", null)
-  to_port         = lookup(var.database_outbound_acl_rules[count.index], "to_port", null)
-  icmp_code       = lookup(var.database_outbound_acl_rules[count.index], "icmp_code", null)
-  icmp_type       = lookup(var.database_outbound_acl_rules[count.index], "icmp_type", null)
-  protocol        = var.database_outbound_acl_rules[count.index]["protocol"]
-  cidr_block      = lookup(var.database_outbound_acl_rules[count.index], "cidr_block", null)
-  ipv6_cidr_block = lookup(var.database_outbound_acl_rules[count.index], "ipv6_cidr_block", null)
-}
-
-########################
 # Redshift Network ACLs
 ########################
 resource "aws_network_acl" "redshift" {
@@ -811,11 +676,11 @@ resource "aws_network_acl" "redshift" {
   subnet_ids = aws_subnet.redshift.*.id
 
   tags = merge(
-    {
-      "Name" = format("%s-${var.redshift_subnet_suffix}", var.name)
-    },
-    var.tags,
-    var.redshift_acl_tags,
+  {
+    "Name" = format("%s-${var.redshift_subnet_suffix}", var.name)
+  },
+  var.tags,
+  var.redshift_acl_tags,
   )
 }
 
@@ -863,11 +728,11 @@ resource "aws_network_acl" "elasticache" {
   subnet_ids = aws_subnet.elasticache.*.id
 
   tags = merge(
-    {
-      "Name" = format("%s-${var.elasticache_subnet_suffix}", var.name)
-    },
-    var.tags,
-    var.elasticache_acl_tags,
+  {
+    "Name" = format("%s-${var.elasticache_subnet_suffix}", var.name)
+  },
+  var.tags,
+  var.elasticache_acl_tags,
   )
 }
 
@@ -918,8 +783,8 @@ resource "aws_network_acl_rule" "elasticache_outbound" {
 # but then when count of aws_eip.nat.*.id is zero, this would throw a resource not found error on aws_eip.nat.*.id.
 locals {
   nat_gateway_ips = split(
-    ",",
-    var.reuse_nat_ips ? join(",", var.external_nat_ip_ids) : join(",", aws_eip.nat.*.id),
+  ",",
+  var.reuse_nat_ips ? join(",", var.external_nat_ip_ids) : join(",", aws_eip.nat.*.id),
   )
 }
 
@@ -929,15 +794,15 @@ resource "aws_eip" "nat" {
   vpc = true
 
   tags = merge(
-    {
-      "Name" = format(
-        "%s-%s",
-        var.name,
-        element(var.azs, var.single_nat_gateway ? 0 : count.index),
-      )
-    },
-    var.tags,
-    var.nat_eip_tags,
+  {
+    "Name" = format(
+    "%s-%s",
+    var.name,
+    element(var.azs, var.single_nat_gateway ? 0 : count.index),
+    )
+  },
+  var.tags,
+  var.nat_eip_tags,
   )
 }
 
@@ -945,24 +810,24 @@ resource "aws_nat_gateway" "this" {
   count = var.create_vpc && var.enable_nat_gateway ? local.nat_gateway_count : 0
 
   allocation_id = element(
-    local.nat_gateway_ips,
-    var.single_nat_gateway ? 0 : count.index,
+  local.nat_gateway_ips,
+  var.single_nat_gateway ? 0 : count.index,
   )
   subnet_id = element(
-    aws_subnet.public.*.id,
-    var.single_nat_gateway ? 0 : count.index,
+  aws_subnet.public.*.id,
+  var.single_nat_gateway ? 0 : count.index,
   )
 
   tags = merge(
-    {
-      "Name" = format(
-        "%s-%s",
-        var.name,
-        element(var.azs, var.single_nat_gateway ? 0 : count.index),
-      )
-    },
-    var.tags,
-    var.nat_gateway_tags,
+  {
+    "Name" = format(
+    "%s-%s",
+    var.name,
+    element(var.azs, var.single_nat_gateway ? 0 : count.index),
+    )
+  },
+  var.tags,
+  var.nat_gateway_tags,
   )
 
   depends_on = [aws_internet_gateway.this]
@@ -996,28 +861,19 @@ resource "aws_route_table_association" "private" {
 
   subnet_id = element(aws_subnet.private.*.id, count.index)
   route_table_id = element(
-    aws_route_table.private.*.id,
-    var.single_nat_gateway ? 0 : count.index,
+  aws_route_table.private.*.id,
+  var.single_nat_gateway ? 0 : count.index,
   )
 }
 
-resource "aws_route_table_association" "database" {
-  count = var.create_vpc && length(var.database_subnets) > 0 ? length(var.database_subnets) : 0
-
-  subnet_id = element(aws_subnet.database.*.id, count.index)
-  route_table_id = element(
-    coalescelist(aws_route_table.database.*.id, aws_route_table.private.*.id),
-    var.single_nat_gateway || var.create_database_subnet_route_table ? 0 : count.index,
-  )
-}
 
 resource "aws_route_table_association" "redshift" {
   count = var.create_vpc && length(var.redshift_subnets) > 0 && false == var.enable_public_redshift ? length(var.redshift_subnets) : 0
 
   subnet_id = element(aws_subnet.redshift.*.id, count.index)
   route_table_id = element(
-    coalescelist(aws_route_table.redshift.*.id, aws_route_table.private.*.id),
-    var.single_nat_gateway || var.create_redshift_subnet_route_table ? 0 : count.index,
+  coalescelist(aws_route_table.redshift.*.id, aws_route_table.private.*.id),
+  var.single_nat_gateway || var.create_redshift_subnet_route_table ? 0 : count.index,
   )
 }
 
@@ -1026,8 +882,8 @@ resource "aws_route_table_association" "redshift_public" {
 
   subnet_id = element(aws_subnet.redshift.*.id, count.index)
   route_table_id = element(
-    coalescelist(aws_route_table.redshift.*.id, aws_route_table.public.*.id),
-    var.single_nat_gateway || var.create_redshift_subnet_route_table ? 0 : count.index,
+  coalescelist(aws_route_table.redshift.*.id, aws_route_table.public.*.id),
+  var.single_nat_gateway || var.create_redshift_subnet_route_table ? 0 : count.index,
   )
 }
 
@@ -1036,11 +892,11 @@ resource "aws_route_table_association" "elasticache" {
 
   subnet_id = element(aws_subnet.elasticache.*.id, count.index)
   route_table_id = element(
-    coalescelist(
-      aws_route_table.elasticache.*.id,
-      aws_route_table.private.*.id,
-    ),
-    var.single_nat_gateway || var.create_elasticache_subnet_route_table ? 0 : count.index,
+  coalescelist(
+  aws_route_table.elasticache.*.id,
+  aws_route_table.private.*.id,
+  ),
+  var.single_nat_gateway || var.create_elasticache_subnet_route_table ? 0 : count.index,
   )
 }
 
@@ -1069,11 +925,11 @@ resource "aws_customer_gateway" "this" {
   type       = "ipsec.1"
 
   tags = merge(
-    {
-      Name = format("%s-%s", var.name, each.key)
-    },
-    var.tags,
-    var.customer_gateway_tags,
+  {
+    Name = format("%s-%s", var.name, each.key)
+  },
+  var.tags,
+  var.customer_gateway_tags,
   )
 }
 
@@ -1088,11 +944,11 @@ resource "aws_vpn_gateway" "this" {
   availability_zone = var.vpn_gateway_az
 
   tags = merge(
-    {
-      "Name" = format("%s", var.name)
-    },
-    var.tags,
-    var.vpn_gateway_tags,
+  {
+    "Name" = format("%s", var.name)
+  },
+  var.tags,
+  var.vpn_gateway_tags,
   )
 }
 
@@ -1108,11 +964,11 @@ resource "aws_vpn_gateway_route_propagation" "public" {
 
   route_table_id = element(aws_route_table.public.*.id, count.index)
   vpn_gateway_id = element(
-    concat(
-      aws_vpn_gateway.this.*.id,
-      aws_vpn_gateway_attachment.this.*.vpn_gateway_id,
-    ),
-    count.index,
+  concat(
+  aws_vpn_gateway.this.*.id,
+  aws_vpn_gateway_attachment.this.*.vpn_gateway_id,
+  ),
+  count.index,
   )
 }
 
@@ -1121,11 +977,11 @@ resource "aws_vpn_gateway_route_propagation" "private" {
 
   route_table_id = element(aws_route_table.private.*.id, count.index)
   vpn_gateway_id = element(
-    concat(
-      aws_vpn_gateway.this.*.id,
-      aws_vpn_gateway_attachment.this.*.vpn_gateway_id,
-    ),
-    count.index,
+  concat(
+  aws_vpn_gateway.this.*.id,
+  aws_vpn_gateway_attachment.this.*.vpn_gateway_id,
+  ),
+  count.index,
   )
 }
 
@@ -1134,11 +990,11 @@ resource "aws_vpn_gateway_route_propagation" "intra" {
 
   route_table_id = element(aws_route_table.intra.*.id, count.index)
   vpn_gateway_id = element(
-    concat(
-      aws_vpn_gateway.this.*.id,
-      aws_vpn_gateway_attachment.this.*.vpn_gateway_id,
-    ),
-    count.index,
+  concat(
+  aws_vpn_gateway.this.*.id,
+  aws_vpn_gateway_attachment.this.*.vpn_gateway_id,
+  ),
+  count.index,
   )
 }
 
@@ -1153,10 +1009,10 @@ resource "aws_default_vpc" "this" {
   enable_classiclink   = var.default_vpc_enable_classiclink
 
   tags = merge(
-    {
-      "Name" = format("%s", var.default_vpc_name)
-    },
-    var.tags,
-    var.default_vpc_tags,
+  {
+    "Name" = format("%s", var.default_vpc_name)
+  },
+  var.tags,
+  var.default_vpc_tags,
   )
 }
